@@ -174,11 +174,13 @@ jobs:
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           TAG: ${{ steps.tag.outputs.tag }}
+          REPO: ${{ github.repository }}
         run: |
           set -eu
-          # Create the release if this tag has none yet, otherwise reuse it.
-          if ! gh release view "$TAG" >/dev/null 2>&1; then
-            gh release create "$TAG" --title "$TAG" --notes "Prebuilt binaries for $TAG"
+          # -R is required: this job downloads artifacts but never checks out the
+          # repository, so gh has no local git context to infer the repo from.
+          if ! gh release view "$TAG" -R "$REPO" >/dev/null 2>&1; then
+            gh release create "$TAG" -R "$REPO" --title "$TAG" --notes "Prebuilt binaries for $TAG"
           fi
-          gh release upload "$TAG" dist/* --clobber
-          gh release view "$TAG" --json assets --jq '.assets[] | "\(.name)  \(.size) bytes"'
+          gh release upload "$TAG" dist/* -R "$REPO" --clobber
+          gh release view "$TAG" -R "$REPO" --json assets --jq '.assets[] | "\(.name)  \(.size) bytes"'
