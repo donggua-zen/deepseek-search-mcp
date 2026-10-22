@@ -32,10 +32,27 @@ MCP 的 stdio 传输本质就是「一行一个 JSON」，这个 server 只需�
 
 ## 快速开始
 
-### 0. 直接下载（Windows x64）
+### 0. 直接下载预编译二进制
 
-从 [Releases](https://github.com/donggua-zen/deepseek-search-mcp/releases/latest) 下载
-`deepseek-search-mcp-v0.1.0-windows-x64.exe` 即可，无需安装任何运行时。其他平台按下节自行编译。
+从 [Releases](https://github.com/donggua-zen/deepseek-search-mcp/releases/latest) 下载对应平台的文件，
+无需安装任何运行时：
+
+| 平台 | 文件 |
+|---|---|
+| macOS Apple Silicon (M1/M2/M3/M4) | `deepseek-search-mcp-macos-arm64` |
+| macOS Intel | `deepseek-search-mcp-macos-x64` |
+| Windows x64 | `deepseek-search-mcp-windows-x64.exe` |
+| Linux x64 | `deepseek-search-mcp-linux-x64` |
+
+**macOS 首次运行**（二进制是 ad-hoc 签名、未做公证，会被 Gatekeeper 拦）：
+
+```bash
+chmod +x deepseek-search-mcp-macos-arm64
+xattr -d com.apple.quarantine deepseek-search-mcp-macos-arm64
+./deepseek-search-mcp-macos-arm64 --version
+```
+
+最低支持 macOS 11.0（Apple Silicon 的底线），Intel 版同样覆盖 11.0+。
 
 ### 1. 编译
 
@@ -43,11 +60,11 @@ MCP 的 stdio 传输本质就是「一行一个 JSON」，这个 server 只需�
 # Windows：需要 MSVC，脚本会自动加载 vcvars64
 ./build.bat release
 
-# 或者已配好工具链的环境直接用 cargo
+# macOS / Linux，或已配好工具链的环境
 cargo build --release
 ```
 
-产物：`target/release/deepseek-mcp.exe`
+产物：`target/release/deepseek-mcp`（Windows 上是 `.exe`）
 
 > Windows 上如果 `cargo build` 报 `link.exe` 相关错误，通常是 Git 自带的 `link`
 > 抢占了 PATH，改用 `build.bat` 即可（它先 call vcvars64.bat 再调 cargo）。
