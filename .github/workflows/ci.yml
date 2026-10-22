@@ -44,6 +44,15 @@ jobs:
           ./target/release/deepseek-mcp --help
         shell: bash
 
+      # Protocol conformance needs no API key: every check either fails locally
+      # or is answered without a network call. This is what catches envelope
+      # regressions such as a missing resultType on tools/list.
+      - name: Protocol conformance (2026-07-28)
+        run: node tests/e2e/conformance.mjs ./target/release/deepseek-mcp
+        shell: bash
+        env:
+          DEEPSEEK_API_KEY: sk-dummy-not-used
+
   # End-to-end test needs a real API key and spends money, so it only runs when
   # the repository has a DEEPSEEK_API_KEY secret configured.
   e2e:
