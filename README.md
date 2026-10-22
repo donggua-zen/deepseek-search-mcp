@@ -1,5 +1,11 @@
 # deepseek-mcp
 
+> **English** — A tiny local MCP server that exposes DeepSeek's [Search / Fetch API](https://api-docs.deepseek.com/guides/search)
+> to any MCP client. DeepSeek's search is currently baked into its own tooling, so third-party
+> agents cannot reach it; this is the missing bridge. Single ~1.8 MB binary, ~12 ms cold start,
+> no Node/Python/.NET runtime, no async runtime, no MCP framework. Speaks both the legacy
+> `initialize` handshake and the stateless 2026-07-28 protocol. See [Usage](#接入客户端) below.
+
 把 DeepSeek 官方的 **Search / Fetch API** 包成一个本机小 MCP server，让任何支持 MCP 的
 客户端（Claude Code、Cursor、Cherry Studio、Codex、Cline、各种自研 agent…）都能直接用上
 DeepSeek 的联网搜索和网页抓取。
