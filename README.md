@@ -32,6 +32,11 @@ MCP 的 stdio 传输本质就是「一行一个 JSON」，这个 server 只需�
 
 ## 快速开始
 
+### 0. 直接下载（Windows x64）
+
+从 [Releases](https://github.com/donggua-zen/deepseek-search-mcp/releases/latest) 下载
+`deepseek-search-mcp-v0.1.0-windows-x64.exe` 即可，无需安装任何运行时。其他平台按下节自行编译。
+
 ### 1. 编译
 
 ```bash
