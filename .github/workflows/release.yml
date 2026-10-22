@@ -1,0 +1,133 @@
+name: Release
+
+# Builds prebuilt binaries for the platforms we can't cross-compile locally.
+# Trigger manually (Actions -> Release -> Run workflow), or by pushing a v* tag.
+
+on:
+  push:
+    tags: ['v*']
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: 'Existing tag to attach binaries to (e.g. v0.1.0)'
+        required: true
+        default: 'v0.1.0'
+
+permissions:
+  contents: write
+
+env:
+  CARGO_TERM_COLOR: always
+
+jobs:
+  build:
+    name: ${{ matrix.name }}
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - name: macOS arm64 (Apple Silicon)
+            os: macos-14
+            target: aarch64-apple-darwin
+            asset: deepseek-search-mcp-macos-arm64
+          - name: macOS x64 (Intel)
+            os: macos-13
+            target: x86_64-apple-darwin
+            asset: deepseek-search-mcp-macos-x64
+          - name: Linux x64
+            os: ubuntu-latest
+            target: x86_64-unknown-linux-gnu
+            asset: deepseek-search-mcp-linux-x64
+          - name: Windows x64
+            os: windows-latest
+            target: x86_64-pc-windows-msvc
+            asset: deepseek-search-mcp-windows-x64.exe
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: ${{ matrix.target }}
+
+      - uses: Swatinem/rust-cache@v2
+        with:
+          key: ${{ matrix.target }}
+
+      - name: Build
+        run: cargo build --release --target ${{ matrix.target }}
+
+      - name: Package (unix)
+        if: runner.os != 'Windows'
+        run: |
+          set -eu
+          BIN=target/${{ matrix.target }}/release/deepseek-mcp
+          OUT=${{ matrix.asset }}
+          cp "$BIN" "$OUT"
+          chmod +x "$OUT"
+          shasum -a 256 "$OUT" > "$OUT.sha256"
+          file "$BIN"
+          ls -lh "$OUT"
+
+      - name: Package (windows)
+        if: runner.os == 'Windows'
+        shell: bash
+        run: |
+          set -eu
+          BIN=target/${{ matrix.target }}/release/deepseek-mcp.exe
+          OUT=${{ matrix.asset }}
+          cp "$BIN" "$OUT"
+          sha256sum "$OUT" > "$OUT.sha256"
+          ls -lh "$OUT"
+
+      - name: Verify binary runs
+        shell: bash
+        run: |
+          set -eu
+          if [ "${{ runner.os }}" = "Windows" ]; then
+            ./${{ matrix.asset }} --version
+          else
+            ./${{ matrix.asset }} --version
+          fi
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: ${{ matrix.asset }}
+          path: |
+            ${{ matrix.asset }}
+            ${{ matrix.asset }}.sha256
+          if-no-files-found: error
+
+  publish:
+    name: Attach to release
+    needs: build
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          path: dist
+          merge-multiple: true
+
+      - name: List artifacts
+        run: ls -lh dist
+
+      - name: Resolve tag
+        id: tag
+        run: |
+          TAG="${{ github.event.inputs.tag }}"
+          if [ -z "$TAG" ]; then TAG="${GITHUB_REF#refs/tags/}"; fi
+          echo "tag=$TAG" >> "$GITHUB_OUTPUT"
+
+      - name: Upload to release
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          TAG: ${{ steps.tag.outputs.tag }}
+        run: |
+          set -eu
+          # Create the release if this tag has none yet, otherwise reuse it.
+          if ! gh release view "$TAG" >/dev/null 2>&1; then
+            gh release create "$TAG" --title "$TAG" --notes "Prebuilt binaries for $TAG"
+          fi
+          gh release upload "$TAG" dist/* --clobber
+          gh release view "$TAG" --json assets --jq '.assets[] | "\(.name)  \(.size) bytes"'
