@@ -1,0 +1,11 @@
+* text=auto
+
+*.rs   text eol=lf
+*.toml text eol=lf
+*.yml  text eol=lf
+*.md   text eol=lf
+*.mjs  text eol=lf
+*.json text eol=lf
+
+# Windows-only helper; batch files want CRLF
+*.bat  text eol=crlf

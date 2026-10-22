@@ -1,0 +1,12 @@
+{
+  "name": "deepseek-mcp-e2e",
+  "private": true,
+  "type": "module",
+  "description": "End-to-end test driving deepseek-mcp through the official MCP TypeScript SDK",
+  "scripts": {
+    "test": "node e2e.mjs ../../target/release/deepseek-mcp.exe"
+  },
+  "dependencies": {
+    "@modelcontextprotocol/sdk": "^1.32.1"
+  }
+}

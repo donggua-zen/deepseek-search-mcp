@@ -1,0 +1,67 @@
+name: CI
+
+on:
+  push:
+    branches: [master, main]
+  pull_request:
+  workflow_dispatch:
+
+env:
+  CARGO_TERM_COLOR: always
+
+jobs:
+  check:
+    name: Build & test (${{ matrix.os }})
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, windows-latest, macos-latest]
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          components: clippy, rustfmt
+
+      - uses: Swatinem/rust-cache@v2
+
+      - name: Format
+        run: cargo fmt --check
+
+      - name: Clippy
+        run: cargo clippy --all-targets -- -D warnings
+
+      - name: Test
+        run: cargo test --release
+
+      - name: Build release binary
+        run: cargo build --release
+
+      - name: Smoke test (version + help, no API key needed)
+        run: |
+          ./target/release/deepseek-mcp --version
+          ./target/release/deepseek-mcp --help
+        shell: bash
+
+  # End-to-end test needs a real API key and spends money, so it only runs when
+  # the repository has a DEEPSEEK_API_KEY secret configured.
+  e2e:
+    name: End-to-end (MCP SDK)
+    runs-on: ubuntu-latest
+    if: ${{ github.event_name == 'workflow_dispatch' }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+      - run: cargo build --release
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+      - name: Run e2e through the official MCP SDK
+        env:
+          DEEPSEEK_API_KEY: ${{ secrets.DEEPSEEK_API_KEY }}
+        run: |
+          cd tests/e2e
+          npm install
+          node e2e.mjs ../../target/release/deepseek-mcp
