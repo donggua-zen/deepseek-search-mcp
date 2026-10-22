@@ -18,6 +18,10 @@ permissions:
 
 env:
   CARGO_TERM_COLOR: always
+  # Pin the min macOS version: building on a macos-15 runner would otherwise
+  # stamp LC_VERSION_MIN_MACOSX=15.0 and refuse to run on anything older.
+  # 11.0 is the floor for Apple Silicon anyway, so one target covers both.
+  MACOSX_DEPLOYMENT_TARGET: "11.0"
 
 jobs:
   build:
@@ -28,11 +32,11 @@ jobs:
       matrix:
         include:
           - name: macOS arm64 (Apple Silicon)
-            os: macos-14
+            os: macos-15-arm64
             target: aarch64-apple-darwin
             asset: deepseek-search-mcp-macos-arm64
           - name: macOS x64 (Intel)
-            os: macos-13
+            os: macos-15
             target: x86_64-apple-darwin
             asset: deepseek-search-mcp-macos-x64
           - name: Linux x64
@@ -66,6 +70,13 @@ jobs:
           OUT=${{ matrix.asset }}
           cp "$BIN" "$OUT"
           chmod +x "$OUT"
+          # Ad-hoc signature so the binary survives Gatekeeper on Apple Silicon.
+          # Not notarised (no paid Apple Developer account), so users still need
+          # to clear the quarantine xattr after downloading — see README.
+          if [ "${{ runner.os }}" = "macOS" ]; then
+            codesign --force --sign - "$OUT"
+            codesign --verify --verbose=2 "$OUT" || exit 1
+          fi
           shasum -a 256 "$OUT" > "$OUT.sha256"
           file "$BIN"
           ls -lh "$OUT"
@@ -85,11 +96,35 @@ jobs:
         shell: bash
         run: |
           set -eu
-          if [ "${{ runner.os }}" = "Windows" ]; then
-            ./${{ matrix.asset }} --version
-          else
-            ./${{ matrix.asset }} --version
+          ./${{ matrix.asset }} --version
+
+      - name: Verify architecture
+        shell: bash
+        run: |
+          set -eu
+          # Fail loudly if the runner produced the wrong slice; a mislabelled
+          # binary is worse than no binary.
+          case "${{ matrix.asset }}" in
+            *macos-arm64)   WANT="arm64";;
+            *macos-x64)     WANT="x86_64";;
+            *linux-x64)     WANT="x86-64";;
+            *)              WANT="";;
+          esac
+          if [ -n "$WANT" ]; then
+            INFO=$(file "${{ matrix.asset }}")
+            echo "$INFO"
+            echo "$INFO" | grep -q "$WANT" || { echo "::error::expected $WANT"; exit 1; }
           fi
+
+      - name: Verify macOS deployment target
+        if: runner.os == 'macOS'
+        run: |
+          set -eu
+          otool -l "${{ matrix.asset }}" | grep -A4 LC_BUILD_VERSION | head -10
+          v=$(otool -l "${{ matrix.asset }}" | grep -m1 minos | awk '{print $2}')
+          echo "minos=$v"
+          # Must not require a newer macOS than the pinned deployment target.
+          [ "$v" = "11.0" ] || { echo "::error::minos is $v, expected 11.0"; exit 1; }
 
       - uses: actions/upload-artifact@v4
         with:
