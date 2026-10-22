@@ -18,6 +18,25 @@ DeepSeek 的联网搜索和网页抓取。
 - 只用 `ureq + serde_json`，没有 async runtime，没有 MCP 框架
 - 兼容新旧协议：旧的 `initialize` 握手和 2026-07-28 的无状态 `server/discover` 都支持
 
+## 协议兼容性
+
+这个 server 同时伺候两代协议，并且**按版本决定输出形状**，不是简单地都加字段：
+
+| | 2024-11-05 … 2025-11-25（旧） | 2026-07-28（新，无状态） |
+|---|---|---|
+| 握手 | `initialize` + `notifications/initialized` | 无，每个请求在 `_meta` 里带版本 |
+| 版本传递 | `initialize` 协商一次 | `_meta["io.modelcontextprotocol/protocolVersion"]` |
+| `resultType` | 不加 | **必加** `"complete"` |
+| 列表结果 | 只有数组字段 | 另需 `ttlMs` + `cacheScope`（`CacheableResult`） |
+| `serverInfo` | `initialize` 里返回 | 每个结果的 `_meta` 里带 |
+| `ping` / `logging/setLevel` | 正常响应 | 已移除，返回 `-32601` |
+| 未知版本 | — | `-32022` + 支持的版本列表 |
+
+**为什么不能统一都加 `resultType`**：旧版客户端校验 `ping` 结果时用的是严格空对象 schema，
+多一个字段就是解析失败。所以字段必须按协商版本开关。
+
+`tests/e2e/conformance.mjs` 直接按线格式校验这 29 项，CI 里用 dummy key 跑，不花钱。
+
 ## 为什么是 Rust
 
 | 方案 | 冷启动 | 分发 | 结论 |
@@ -173,12 +192,18 @@ deepseek-mcp                               # 无子命令 = stdio MCP server
 ## 开发
 
 ```bash
-cargo test --release      # 6 个单元测试
+cargo test --release      # 12 个单元测试
 cargo clippy              # 零警告
+
+# 协议合规检查（不需 API key，29 项断言，不花钱）
+node tests/e2e/conformance.mjs target/release/deepseek-mcp
 
 # 官方 SDK 端到端（需要真实 API Key，约 2 次计费请求）
 cd tests/e2e && npm install && DEEPSEEK_API_KEY=sk-xxx npm test
 ```
+
+> 官方 `@modelcontextprotocol/sdk` 目前最多只协商到 `2025-11-25`，**测不到 2026-07-28
+> 的无状态路径**。这就是 `conformance.mjs` 存在的原因：它直接按线格式发报文。
 
 > Windows 下用 `./build.bat test` 代替 `cargo test`（见上文 link.exe 说明）。
 >
