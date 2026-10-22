@@ -31,8 +31,11 @@ jobs:
       fail-fast: false
       matrix:
         include:
+          # Both macOS targets build on the x64 runner: the Apple SDK ships both
+          # slices, and macos-15-arm64 is heavily contended (a run sat queued for
+          # 30+ minutes), while macos-15 usually starts in under a minute.
           - name: macOS arm64 (Apple Silicon)
-            os: macos-15-arm64
+            os: macos-15
             target: aarch64-apple-darwin
             asset: deepseek-search-mcp-macos-arm64
           - name: macOS x64 (Intel)
@@ -94,6 +97,9 @@ jobs:
 
       - name: Verify binary runs
         shell: bash
+        # Cross-compiled arm64 cannot execute on the x64 runner; installing it
+        # under Rosetta would only test Rosetta, not the artifact.
+        if: matrix.target != 'aarch64-apple-darwin'
         run: |
           set -eu
           ./${{ matrix.asset }} --version
@@ -116,15 +122,25 @@ jobs:
             echo "$INFO" | grep -q "$WANT" || { echo "::error::expected $WANT"; exit 1; }
           fi
 
-      - name: Verify macOS deployment target
+      - name: Verify Mach-O slice and deployment target
         if: runner.os == 'macOS'
         run: |
           set -eu
-          otool -l "${{ matrix.asset }}" | grep -A4 LC_BUILD_VERSION | head -10
-          v=$(otool -l "${{ matrix.asset }}" | grep -m1 minos | awk '{print $2}')
+          BIN=${{ matrix.asset }}
+          # Confirm the actual Mach-O header, not just `file`'s guess: CPU type
+          # is what the loader reads.
+          lipo -info "$BIN"
+          ARCH=$(lipo -archs "$BIN")
+          echo "archs=$ARCH"
+          case "${{ matrix.target }}" in
+            aarch64-apple-darwin)  [ "$ARCH" = "arm64" ] || { echo "::error::wanted arm64, got $ARCH"; exit 1; };;
+            x86_64-apple-darwin)   [ "$ARCH" = "x86_64" ] || { echo "::error::wanted x86_64, got $ARCH"; exit 1; };;
+          esac
+          v=$(otool -l "$BIN" | grep -m1 minos | awk '{print $2}')
           echo "minos=$v"
           # Must not require a newer macOS than the pinned deployment target.
           [ "$v" = "11.0" ] || { echo "::error::minos is $v, expected 11.0"; exit 1; }
+          codesign --verify --verbose=2 "$BIN"
 
       - uses: actions/upload-artifact@v4
         with:
